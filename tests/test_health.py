@@ -6,4 +6,4 @@ def test_status_is_ok() -> None:
 
 
 def test_casse() -> None:
-    assert 1 == 2
+    assert status() == {"status": "ko"}
