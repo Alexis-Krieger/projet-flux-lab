@@ -1,7 +1,7 @@
 [project]
 name = "flux-lab"
 version = "0.1.0"
-description = "Add your description here"
+description = "Laboratoire de flux : API Python avec chaîne CI/CD sécurisée"
 readme = "README.md"
 authors = [
     { name = "Alexis-Krieger", email = "alexis.krieger@hotmail.fr" }
