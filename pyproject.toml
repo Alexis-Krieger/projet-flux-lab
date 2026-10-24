@@ -1,6 +1,6 @@
 [project]
 name = "flux-lab"
-version = "0.2.1"
+version = "0.2.2"
 description = "Laboratoire du flux : API Python avec chaîne CI/CD sécurisée"
 readme = "README.md"
 authors = [
