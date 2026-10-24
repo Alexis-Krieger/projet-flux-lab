@@ -17,8 +17,10 @@ def base_temporaire(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_health_retourne_ok() -> None:
     response = client.get("/health")
+    body = response.json()
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert body["status"] == "ok"
+    assert "version" in body
 
 
 def test_message_valide_est_accepte() -> None:

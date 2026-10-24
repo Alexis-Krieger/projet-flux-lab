@@ -2,4 +2,6 @@ from flux_lab.health import status
 
 
 def test_status_is_ok() -> None:
-    assert status() == {"status": "ok"}
+    result = status()
+    assert result["status"] == "ok"
+    assert result["version"]
