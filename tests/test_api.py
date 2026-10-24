@@ -1,9 +1,9 @@
-from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
-from flux_lab.api import app, messages_recus
+from flux_lab.api import app
 
 client = TestClient(app)
 
@@ -11,10 +11,8 @@ MESSAGE = {"id": "abc-1", "type": "commande", "payload": {"montant": 42}}
 
 
 @pytest.fixture(autouse=True)
-def reset_messages() -> Iterator[None]:
-    messages_recus.clear()
-    yield
-    messages_recus.clear()
+def base_temporaire(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FLUX_LAB_DB", str(tmp_path / "test.db"))
 
 
 def test_health_retourne_ok() -> None:
