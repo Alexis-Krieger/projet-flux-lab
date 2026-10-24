@@ -36,3 +36,15 @@ def test_le_payload_n_est_jamais_journalise(
     sorties = [JsonFormatter().format(r) for r in caplog.records if r.name == "flux_lab"]
     assert sorties
     assert all("4111-SECRET" not in sortie for sortie in sorties)
+
+
+def test_l_erreur_de_stockage_est_journalisee_sans_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.setenv("FLUX_LAB_DB", str(tmp_path / "absent" / "x.db"))
+    message = {"id": "x-2", "type": "commande", "payload": {"carte": "4111-SECRET"}}
+    with caplog.at_level(logging.INFO, logger="flux_lab"):
+        client.post("/messages", json=message)
+    sorties = [JsonFormatter().format(r) for r in caplog.records if r.name == "flux_lab"]
+    assert any("erreur_stockage" in sortie for sortie in sorties)
+    assert all("4111-SECRET" not in sortie for sortie in sorties)
