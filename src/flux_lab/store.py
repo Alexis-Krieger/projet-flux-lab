@@ -24,3 +24,17 @@ def enregistrer(message_id: str) -> bool:
     finally:
         connexion.close()
     return True
+
+
+def stockage_disponible() -> bool:
+    """Tente une écriture annulée : vérifie que le stockage accepte vraiment d'écrire."""
+    try:
+        connexion = _connexion()
+        try:
+            connexion.execute("INSERT INTO messages_recus (id) VALUES ('__sonde__')")
+            connexion.rollback()
+        finally:
+            connexion.close()
+    except sqlite3.Error:
+        return False
+    return True
