@@ -30,7 +30,10 @@ jobs:
         run: uv export --format cyclonedx1.5 --locked --no-dev --preview-features sbom-export -o dist/sbom.cdx.json
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
-          subject-path: "dist/*"
+          subject-path: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/sbom.cdx.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: dist
