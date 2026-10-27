@@ -8,6 +8,8 @@
 | Dependabot alerts | idem, en continu | onglet Security du dépôt |
 | Dependabot version updates | nouvelle version d'une dépendance ou d'une action | pull requests ouvertes par `dependabot[bot]` |
 | gitleaks | un secret a été committé | à lancer sur l'historique avant toute publication |
+| Trivy (CI, workflow `Container`) | une faille connue dans le système de base ou l'interpréteur de l'image | échec de l'étape « Analyser l'image » |
+
 
 ## Délais de traitement
 

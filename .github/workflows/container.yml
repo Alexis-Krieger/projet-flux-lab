@@ -20,6 +20,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - name: Construire l'image
         run: docker build -t flux-lab:ci .
+      - name: Analyser l'image (failles connues)
+        run: |
+          docker save flux-lab:ci -o "$RUNNER_TEMP/image.tar"
+          docker run --rm -v "$RUNNER_TEMP/image.tar:/image.tar:ro" \
+            ghcr.io/aquasecurity/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
+            image --input /image.tar --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed
       - name: Vérifier que le conteneur ne tourne pas en root
         run: test "$(docker run --rm --entrypoint id flux-lab:ci -u)" != "0"
       - name: Test de fumée du conteneur
