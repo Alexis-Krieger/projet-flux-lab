@@ -22,6 +22,13 @@ jobs:
         run: docker build -t flux-lab:ci .
       - name: Vérifier que le conteneur ne tourne pas en root
         run: test "$(docker run --rm --entrypoint id flux-lab:ci -u)" != "0"
+      - name: Analyser l'image (failles connues)
+        run: |
+          docker pull python:3.9.2-slim
+          docker save python:3.9.2-slim -o "$RUNNER_TEMP/image.tar"
+          docker run --rm -v "$RUNNER_TEMP/image.tar:/image.tar:ro" \
+            ghcr.io/aquasecurity/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
+            image --input /image.tar --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed
       - name: Test de fumée du conteneur
         run: |
           docker run -d --name flux -p 8000:8000 flux-lab:ci
