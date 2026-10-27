@@ -1,0 +1,17 @@
+.git
+.github
+.venv
+.deploy
+data
+dist
+docs
+tests
+scripts
+config
+*.db
+*.pyc
+__pycache__
+.pytest_cache
+.coverage
+sbom.cdx.json
+
