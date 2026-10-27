@@ -54,4 +54,45 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes
-
+  image:
+    needs: publish
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      IMAGE: ghcr.io/alexis-krieger/projet-flux-lab
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Construire l'image
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/${GITHUB_REPOSITORY}" \
+            --label "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            -t "$IMAGE:$TAG" .
+      - name: Analyser l'image (failles connues)
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          docker save "$IMAGE:$TAG" -o "$RUNNER_TEMP/image.tar"
+          docker run --rm -v "$RUNNER_TEMP/image.tar:/image.tar:ro" \
+            ghcr.io/aquasecurity/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c \
+            image --input /image.tar --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed
+      - name: Publier l'image
+        id: push
+        env:
+          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE:$TAG"
+          echo "digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$TAG" | cut -d@ -f2)" >> "$GITHUB_OUTPUT"
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        with:
+          subject-name: ghcr.io/alexis-krieger/projet-flux-lab
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
