@@ -1,16 +1,37 @@
+# Décrit la VM de déploiement. "vagrant up" la crée, "vagrant destroy" la supprime.
+# Ce fichier est du Ruby ; "2" est la version du format de configuration.
 Vagrant.configure("2") do |config|
+  # Image de départ (une "box") : Ubuntu 22.04, publiée par Canonical.
   config.vm.box = "ubuntu/jammy64"
+
+  # Version FIGÉE de la box : la VM d'aujourd'hui est celle de demain
+  # (même principe que uv.lock).
   config.vm.box_version = "20241002.0.0"
+
+  # Ne pas chercher de nouvelle version de la box à chaque démarrage.
   config.vm.box_check_update = false
+
+  # Nom de la machine vue de l'intérieur.
   config.vm.hostname = "flux-deploy"
+
+  # Réseau PRIVÉ : la VM est joignable depuis ce PC uniquement, pas depuis Internet.
   config.vm.network "private_network", ip: "192.168.56.20"
+
+  # Désactive le dossier partagé : la VM ne voit PAS les fichiers de ce PC.
+  # Une VM compromise n'a ainsi aucun accès à ton disque.
   config.vm.synced_folder ".", "/vagrant", disabled: true
 
+  # Réglages propres à VirtualBox.
   config.vm.provider "virtualbox" do |vb|
-    vb.name = "flux-deploy"
-    vb.memory = 2048
-    vb.cpus = 2
+    vb.name = "flux-deploy"   # nom affiché dans VirtualBox
+    vb.memory = 2048          # 2 Go de mémoire
+    vb.cpus = 2               # 2 processeurs
   end
 
+  # ÉTAPE 1 : copie le script gardien de ce PC vers la VM (dans /tmp).
+  # Doit venir AVANT l'étape 2, qui l'installe.
+  config.vm.provision "file", source: "flux-deploy.sh", destination: "/tmp/flux-deploy.sh"
+
+  # ÉTAPE 2 : exécute provision.sh dans la VM, en root.
   config.vm.provision "shell", path: "provision.sh"
 end
