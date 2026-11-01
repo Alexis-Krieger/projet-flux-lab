@@ -25,6 +25,7 @@ Réponses de `POST /messages` :
 - Python 3.12
 - [uv](https://docs.astral.sh/uv/)
 - Git Bash (Windows) ou un shell POSIX
+- Pour le déploiement : VirtualBox et Vagrant
 
 ## Démarrer en local
 
@@ -54,32 +55,66 @@ La CI exécute les mêmes contrôles à chaque pull request.
 
 ## Déployer
 
-Une version est un tag Git (`vX.Y.Z`). Le workflow `Release` construit le paquet,
-lance un test de fumée, puis publie une release GitHub après approbation.
+Une version est un tag Git (`vX.Y.Z`). Le workflow `Release` construit le paquet, lance un
+test de fumée, publie la release GitHub après approbation, puis construit l'image de
+conteneur, la scanne avec Trivy, la publie sur `ghcr.io/alexis-krieger/projet-flux-lab` et
+produit son attestation de provenance.
 
-Déploiement local d'une version dans un environnement :
+Le service tourne dans une VM décrite dans `infra/vm/` (Vagrant), joignable sur
+`http://192.168.56.20:8000`. Créer ou rallumer la VM :
 
 ```bash
-bash scripts/deploy.sh <test|prod> <tag>
-bash scripts/start.sh <test|prod>
+cd infra/vm
+vagrant up
 ```
 
-Retour arrière : redéployer la version précédente avec la même commande.
+Déployer une image, désignée par son empreinte :
+
+```bash
+vagrant ssh -c "sudo -u deploy sudo /usr/local/sbin/flux-deploy sha256:<empreinte>"
+```
+
+Le gardien `flux-deploy` vérifie l'attestation avec `cosign` (elle doit venir du workflow
+`release.yml` de ce dépôt), puis lance l'image en lecture seule, sans capacités, avec la base
+sur le volume `flux-data`. Si le nouveau conteneur n'est pas prêt en 30 secondes, il remet
+l'ancien en service et le script se termine avec le code `3`.
+
+Retour arrière manuel : relancer la même commande avec l'empreinte de la version précédente.
+
+Lire l'empreinte d'une version publiée :
+
+```bash
+tok=$(curl -s "https://ghcr.io/token?scope=repository:alexis-krieger/projet-flux-lab:pull" | sed 's/.*"token":"\([^"]*\)".*/\1/')
+curl -sI -H "Authorization: Bearer $tok" \
+  -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
+  https://ghcr.io/v2/alexis-krieger/projet-flux-lab/manifests/vX.Y.Z | grep -i docker-content-digest
+```
+
+Vérifier un paquet avant de l'installer : voir [docs/verification.md](docs/verification.md).
 
 ## Configuration
 
-Un fichier par environnement dans `config/` (`test.env`, `prod.env`).
-Aucun secret n'y figure.
+Dans la VM, la configuration vient de l'image (`FLUX_LAB_DB=/data/flux_lab.db`) et des options
+fixées par le gardien (port 8000, volume `flux-data`). Aucun secret n'y figure.
+
+Les fichiers `config/test.env` et `config/prod.env` ne servent qu'au lancement local
+(`scripts/run.sh`).
 
 | Variable | Rôle |
 |---|---|
-| `PORT` | port d'écoute |
+| `PORT` | port d'écoute (lancement local) |
 | `FLUX_LAB_DB` | chemin du fichier SQLite |
 
 ## Logs
 
 Une ligne JSON par événement : `message_recu`, `message_doublon`,
 `erreur_stockage`, `stockage_indisponible`. Le contenu (`payload`) n'est jamais journalisé.
+
+Dans la VM :
+
+```bash
+vagrant ssh -c "sudo docker logs flux-lab"
+```
 
 ## En cas d'incident
 
