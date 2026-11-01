@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Le "gardien" : vérifie qu'une image a bien été fabriquée par notre workflow
-# de release, puis seulement la lance. Il est installé dans la VM sous
+# de release, puis seulement la lance. Si le nouveau conteneur ne devient pas
+# prêt, il remet l'ancien en service. Il est installé dans la VM sous
 # /usr/local/sbin/flux-deploy, propriété de root.
 #
 # Codes de sortie : 0 = déployé, 1 = vérification échouée,
-#                   2 = argument invalide, 3 = service pas prêt.
+#                   2 = argument invalide,
+#                   3 = nouveau service pas prêt (retour arrière tenté).
 
 # -e : s'arrêter dès qu'une commande échoue
 # -u : une variable non définie est une erreur (évite les fautes de frappe)
@@ -23,8 +25,9 @@ ISSUER="https://token.actions.githubusercontent.com"
 # Un autre workflow, un autre dépôt ou une branche ne passent pas cette expression.
 IDENTITY='^https://github.com/Alexis-Krieger/projet-flux-lab/\.github/workflows/release\.yml@refs/tags/v.*$'
 
-# Nom du conteneur, et adresse où on teste qu'il est prêt.
+# Nom du conteneur, nom sous lequel on garde l'ancien, et adresse du test de disponibilité.
 NAME="flux-lab"
+PREVIOUS="${NAME}-precedent"
 URL="http://192.168.56.20:8000"
 
 # --- 1. Contrôle de l'argument ------------------------------------------------
@@ -55,20 +58,29 @@ if ! cosign verify-attestation --type slsaprovenance1 \
       --certificate-identity-regexp "$IDENTITY" \
       "$ref" > /dev/null 2>&1; then
   echo "VÉRIFICATION ÉCHOUÉE : rien n'est déployé" >&2
-  exit 1       # on s'arrête ICI : rien en dessous ne s'exécute
+  exit 1       # on s'arrête ICI : rien en dessous ne s'exécute, le service en place n'est pas touché
 fi
 echo "vérification réussie"
 
-# --- 3. Lancement du conteneur ------------------------------------------------
+# --- 3. Lancement du conteneur, avec possibilité de retour arrière -----------
 
-# Télécharge l'image exacte désignée par l'empreinte.
+# Télécharge l'image exacte désignée par l'empreinte. Fait AVANT de toucher à
+# l'ancien conteneur : si le téléchargement échoue, le service en place continue.
 docker pull "$ref" > /dev/null
 
-# Supprime l'ancien conteneur s'il existe. "|| true" évite que "set -e" arrête le
-# script quand il n'y en a pas (premier déploiement).
-# LIMITE CONNUE : l'ancien est supprimé avant de savoir si le nouveau démarre ;
-# le retour arrière automatique sera ajouté dans une étape suivante.
-docker rm -f "$NAME" > /dev/null 2>&1 || true
+# Nettoie un ancien "précédent" laissé par un essai antérieur : sinon le
+# renommage ci-dessous échouerait. "|| true" : ne pas s'arrêter s'il n'existe pas.
+docker rm -f "$PREVIOUS" > /dev/null 2>&1 || true
+
+# Si un conteneur tourne déjà, on NE LE SUPPRIME PAS : on l'arrête et on le renomme.
+# Il reste sur la machine, prêt à être relancé sans réseau ni registre : un retour
+# arrière ne doit pas dépendre de ce qui peut justement être en panne.
+had_previous=0
+if docker inspect "$NAME" > /dev/null 2>&1; then
+  docker stop "$NAME" > /dev/null          # libère le port 8000
+  docker rename "$NAME" "$PREVIOUS"        # libère le nom pour le nouveau
+  had_previous=1
+fi
 
 # Options de sécurité fixées ICI, pas par celui qui appelle :
 #   -d                              : en arrière-plan
@@ -89,16 +101,38 @@ docker run -d --name "$NAME" --restart unless-stopped \
 
 # --- 4. Attente que le service soit prêt -------------------------------------
 
+ready=0
 # Essaie jusqu'à 30 fois, une fois par seconde. "_" : variable dont on n'a pas besoin.
 for _ in $(seq 1 30); do
   # curl -s : silencieux ; -f : échoue si la réponse est une erreur HTTP (ex. 503),
   # donc /ready qui répond 503 compte comme "pas prêt".
   if curl -sf "$URL/ready" > /dev/null; then
-    echo "déployé : $ref"
-    exit 0
+    ready=1
+    break
   fi
   sleep 1
 done
 
-echo "le service n'est pas prêt après 30 s" >&2
+if [ "$ready" -eq 1 ]; then
+  # Succès : l'ancien conteneur n'est plus utile, on le supprime.
+  docker rm -f "$PREVIOUS" > /dev/null 2>&1 || true
+  echo "déployé : $ref"
+  exit 0
+fi
+
+# --- 5. Échec : retour arrière -----------------------------------------------
+
+echo "le service n'est pas prêt après 30 s : retour arrière" >&2
+
+# Supprime le nouveau conteneur défaillant.
+docker rm -f "$NAME" > /dev/null 2>&1 || true
+
+# Remet l'ancien en service, s'il y en avait un (pas au tout premier déploiement).
+if [ "$had_previous" -eq 1 ]; then
+  docker rename "$PREVIOUS" "$NAME"
+  docker start "$NAME" > /dev/null
+  echo "ancien conteneur relancé" >&2
+fi
+
+# Le script signale l'échec même s'il a restauré le service.
 exit 3
