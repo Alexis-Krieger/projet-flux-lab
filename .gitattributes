@@ -1,0 +1,6 @@
+# Fichiers exécutés sous Linux (VM, conteneur, CI) : toujours des fins de ligne LF.
+*.sh        text eol=lf
+Vagrantfile text eol=lf
+Dockerfile  text eol=lf
+*.env       text eol=lf
+
